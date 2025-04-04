@@ -1,7 +1,0 @@
-Flask
-gunicorn
-python-dotenv
-openai
-supabase
-bcrypt
-pandas
