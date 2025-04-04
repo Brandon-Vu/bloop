@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home - Banking App</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      width: 100%;
+      overflow-y: auto;
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(to bottom, #4da6ff, #ffe0bd);
+    }
+    .app-container {
+      width: 100%;
+      min-height: 100vh;
+      background-color: #f4f7fe;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+    }
+    .top-bar {
+      background-color: #4da6ff;
+      padding: 16px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .search-bar {
+      background: #fff;
+      padding: 8px 12px;
+      border-radius: 20px;
+      flex-grow: 1;
+      margin: 0 10px;
+      color: #333;
+    }
+    .actions {
+      display: flex;
+      justify-content: space-around;
+      padding: 16px 10px;
+      background: #e9eff9;
+    }
+    .actions a {
+      text-align: center;
+      font-size: 14px;
+      color: #4da6ff;
+      text-decoration: none;
+    }
+    .transactions-wrapper {
+      margin: 16px;
+    }
+    .transactions {
+      background: #fff;
+      padding: 16px;
+      border-radius: 12px;
+      transition: max-height 0.3s ease-out;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+    }
+    .transactions.collapsed {
+      max-height: 150px;
+      overflow-y: hidden;
+    }
+    .transactions.expanded {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .transaction {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .transaction:last-child {
+      border-bottom: none;
+    }
+    .transaction-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .transaction-desc {
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .transaction-category {
+      font-size: 12px;
+      color: #888;
+    }
+    .transaction-amount {
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .toggle-container {
+      text-align: center;
+      margin-top: 10px;
+    }
+    .toggle-btn {
+      background-color: #4da6ff;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      transition: background-color 0.2s;
+    }
+    .toggle-btn:hover {
+      background-color: #2d87d7;
+    }
+    .chart {
+      background: #fff;
+      margin: 16px;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+      cursor: pointer;
+    }
+    .chart .amount {
+      font-size: 24px;
+      margin-bottom: 8px;
+      font-weight: bold;
+      color: #333;
+    }
+    .bottom-nav {
+      display: flex;
+      justify-content: space-around;
+      background: #e9eff9;
+      padding: 12px 0;
+      border-top: 1px solid #ddd;
+    }
+    .bottom-nav a {
+      text-align: center;
+      font-size: 12px;
+      color: #4da6ff;
+      text-decoration: none;
+    }
+    .bottom-nav .active {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <div class="top-bar">
+      <div>BV</div>
+      <div class="search-bar">Search</div>
+      <div>📊</div>
+    </div>
+    <div style="padding: 16px;">
+      <label style="font-weight: bold;">📁 Upload Your Finance CSV</label><br>
+      <input type="file" id="csvFileInput" accept=".csv" />
+    </div>
+    <div class="actions">
+      <a href="balance">➕<br>Add money</a>
+      <a href="#">🔁<br>Move</a>
+      <a href="#">🏠<br>Details</a>
+      <a href="#">⋯<br>More</a>
+    </div>
+    <div class="transactions-wrapper">
+      <div class="transactions collapsed" id="transactionsContainer"></div>
+      <div class="toggle-container">
+        <button class="toggle-btn" id="toggleButton">Show More</button>
+      </div>
+    </div>
+    <div class="chart" id="chartSection" onclick="window.location.href='monthly-charts.html'">
+      <div class="amount" id="spentAmount">Spent this month: £0.00</div>
+      <div id="balanceText">Current Balance: £0.00</div>
+      <canvas id="monthlyChart" style="margin-top:16px; width:100%; height:200px;"></canvas>
+    </div>
+    <div class="bottom-nav">
+      <a href="home.html" class="active">🏠<br>Home</a>
+      <a href="saym.html">🤖<br>Saym</a>
+    </div>
+  </div>
+  <script>
+    const supabaseClient = supabase.createClient(
+      'https://asdoahgeiliotxyvnplu.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzZG9haGdlaWxpb3R4eXZucGx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM0NzgwMTcsImV4cCI6MjA1OTA1NDAxN30.vZk3XgKXwvrqfX4WfGTvUqj3HgzI7YjE8ds4XV3es0s'
+    );
+
+    let allTransactions = [];
+    let showAll = false;
+
+    async function loadFinanceData() {
+      const userId = localStorage.getItem('saive_user_id');
+      if (!userId) {
+        alert("You must log in first.");
+        window.location.href = "index";
+        return;
+      }
+
+      const { data, error } = await supabaseClient
+        .from('users')
+        .select('user_finance')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data?.user_finance) {
+        document.getElementById('transactionsContainer').innerHTML = "No finance records found.";
+        return;
+      }
+
+      const csvText = data.user_finance;
+      const lines = csvText.split('\n').filter(line => line.trim() !== '');
+      const headers = lines[0].split(',');
+      allTransactions = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',');
+        if (values.length === headers.length) {
+          const transaction = {};
+          for (let j = 0; j < headers.length; j++) {
+            transaction[headers[j].trim()] = values[j].trim();
+          }
+          allTransactions.push(transaction);
+        }
+      }
+
+      renderTransactions();
+      updateChart();
+    }
+
+    function renderTransactions() {
+      const container = document.getElementById('transactionsContainer');
+      container.innerHTML = '';
+      const txns = allTransactions.slice().reverse();
+
+      txns.forEach(tx => {
+        const div = document.createElement('div');
+        div.className = 'transaction';
+
+        const info = document.createElement('div');
+        info.className = 'transaction-info';
+        info.innerHTML = `<span class='transaction-desc'>${tx['Description']}</span>
+                          <span class='transaction-category'>${tx['Category'] || 'Uncategorized'}</span>`;
+
+        const amount = document.createElement('div');
+        amount.className = 'transaction-amount';
+        const amt = parseFloat(tx['Amount']);
+        if (tx['Transaction Type'].toLowerCase() === 'credit') {
+          amount.textContent = `+£${amt.toFixed(2)}`;
+          amount.style.color = 'green';
+        } else {
+          amount.textContent = `-£${amt.toFixed(2)}`;
+          amount.style.color = 'red';
+        }
+
+        div.appendChild(info);
+        div.appendChild(amount);
+        container.appendChild(div);
+      });
+
+      container.className = showAll ? 'transactions expanded' : 'transactions collapsed';
+      document.getElementById('toggleButton').textContent = showAll ? 'Show Less' : 'Show More';
+    }
+
+    function updateChart() {
+      if (allTransactions.length === 0) return;
+
+      const latestBalance = parseFloat(allTransactions[allTransactions.length - 1]['Balance']);
+      document.getElementById('balanceText').textContent = `Current Balance: £${latestBalance.toFixed(2)}`;
+
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      let spent = 0;
+      let dailySpending = {};
+
+      allTransactions.forEach(tx => {
+        if (tx['Transaction Type'].toLowerCase() === 'debit' && tx['Date'].startsWith(currentMonth)) {
+          const amt = parseFloat(tx['Amount']);
+          spent += amt;
+          const day = tx['Date'].split('-')[2];
+          dailySpending[day] = (dailySpending[day] || 0) + amt;
+        }
+      });
+
+      document.getElementById('spentAmount').textContent = `Spent this month: £${spent.toFixed(2)}`;
+
+      const labels = Object.keys(dailySpending).sort((a, b) => a - b);
+      const dataPoints = labels.map(day => dailySpending[day]);
+
+      const ctx = document.getElementById('monthlyChart').getContext('2d');
+      if (window.monthlyChart) window.monthlyChart.destroy();
+
+      window.monthlyChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Daily Spending',
+            data: dataPoints,
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          plugins: {
+            title: {
+              display: true,
+              text: `Spending in ${currentMonth}`
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById("csvFileInput").addEventListener("change", function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function (e) {
+        const csvText = e.target.result;
+        const userId = localStorage.getItem("saive_user_id");
+        if (!userId) {
+          alert("You must be logged in to upload data.");
+          return;
+        }
+
+        const { error } = await supabaseClient
+          .from("users")
+          .update({ user_finance: csvText })
+          .eq("id", userId);
+
+        if (error) {
+          alert("❌ Failed to upload CSV. Please try again.");
+          console.error(error);
+        } else {
+          alert("✅ CSV uploaded successfully! Reloading...");
+          window.location.reload();
+        }
+      };
+
+      reader.readAsText(file);
+    });
+
+    document.getElementById('toggleButton').addEventListener('click', function () {
+      showAll = !showAll;
+      renderTransactions();
+    });
+
+    window.onload = loadFinanceData;
+  </script>
+</body>
+</html>
